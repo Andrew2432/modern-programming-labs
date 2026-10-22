@@ -9,12 +9,19 @@ namespace CinemaBooking.Domain;
 public class Movie
 {
     public Guid Id { get; } = Guid.NewGuid();
-    public string Title { get; set; }
-    public int DurationMinutes { get; set; }
+    
+    // required обязывает задать значение при создании, а init запрещает его менять потом
+    public required string Title { get; init; } 
+    public required int DurationMinutes { get; init; } 
+    
+    // string? означает, что описание может быть пустым (null)
+    public string? Description { get; set; } 
 
-    public Movie(string title, int durationMinutes)
+    // Relational pattern для распределения фильмов по длительности
+    public string GetMovieCategory() => DurationMinutes switch
     {
-        Title = title;
-        DurationMinutes = durationMinutes;
-    }
+        < 90 => "Short",
+        <= 150 => "Standard",
+        _ => "Long"
+    };
 }
