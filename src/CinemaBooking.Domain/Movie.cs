@@ -9,12 +9,16 @@ namespace CinemaBooking.Domain;
 public class Movie
 {
     public Guid Id { get; } = Guid.NewGuid();
-    public string Title { get; set; }
-    public int DurationMinutes { get; set; }
+    
+    public required string Title { get; init; } 
+    public required int DurationMinutes { get; init; } 
+    
+    public string? Description { get; set; } 
 
-    public Movie(string title, int durationMinutes)
+    public string GetMovieCategory() => DurationMinutes switch
     {
-        Title = title;
-        DurationMinutes = durationMinutes;
-    }
+        < 90 => "Short",
+        <= 150 => "Standard",
+        _ => "Long"
+    };
 }
