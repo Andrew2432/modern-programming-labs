@@ -12,5 +12,7 @@ public enum ScreeningStatus
     SalesOpen,
     Started,
     Finished,
-    Cancelled
+    Cancelled,
+    Available,
+    SoldOut
 }

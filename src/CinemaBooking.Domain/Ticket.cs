@@ -6,15 +6,4 @@ using System.Threading.Tasks;
 
 namespace CinemaBooking.Domain;
 
-public class Ticket
-{
-    public Guid Id { get; } = Guid.NewGuid();
-    public int SeatNumber { get; }
-    public decimal Price { get; }
-
-    public Ticket(int seatNumber, decimal price)
-    {
-        SeatNumber = seatNumber;
-        Price = price;
-    }
-}
+public record Ticket(Screening Screening, Seat Seat, decimal Price);

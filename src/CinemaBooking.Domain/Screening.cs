@@ -43,11 +43,11 @@ public class Screening
         if (basePrice <= 0)
             throw new ArgumentException("Ціна квитка має бути більшою за нуль.");
 
-        if (_tickets.Any(t => t.SeatNumber == seatNumber))
+        if (_tickets.Any(t => t.Seat.Number == seatNumber))
             throw new InvalidOperationException("Це місце вже продане.");
 
         decimal finalPrice = pricing.CalculatePrice(basePrice);
-        var ticket = new Ticket(seatNumber, finalPrice);
+        var ticket = new Ticket(this, new Seat(1, seatNumber), finalPrice);
         _tickets.Add(ticket);
     }
 }
