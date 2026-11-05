@@ -1,26 +1,41 @@
 ﻿using System.Text;
 using CinemaBooking.Domain;
+using CinemaBooking.Domain.Extensions;
+using CinemaBooking.Domain.Models;
+using CinemaBooking.Domain.Pricing;
 using CinemaBooking.Domain.Repositories;
+using CinemaBooking.Domain.Services;
 
 Console.OutputEncoding = Encoding.UTF8;
+
+Action<string> logger = message => Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {message}");
 
 var moviesRepo = new InMemoryRepository<Movie>();
 var screeningsRepo = new InMemoryRepository<Screening>();
 var ticketsRepo = new InMemoryRepository<Ticket>();
 
-var hall = new Hall("Main Hall", 100); 
+var hall = new Hall("Main Hall", 100);
 
 var m1 = new Movie { Title = "Dune", Description = "Sci-Fi", DurationMinutes = 155 };
 var m2 = new Movie { Title = "Matrix", Description = "Action", DurationMinutes = 136 };
 var m3 = new Movie { Title = "Avatar", Description = "Sci-Fi", DurationMinutes = 162 };
+var m4 = new Movie { Title = "Interstellar", Description = "Sci-Fi", DurationMinutes = 169 };
 
-moviesRepo.Add(m1); moviesRepo.Add(m2); moviesRepo.Add(m3);
+moviesRepo.Add(m1); moviesRepo.Add(m2); moviesRepo.Add(m3); moviesRepo.Add(m4);
 
 var s1 = new Screening { Movie = m1, Hall = hall, Status = ScreeningStatus.Available };
 var s2 = new Screening { Movie = m2, Hall = hall, Status = ScreeningStatus.Available };
 var s3 = new Screening { Movie = m3, Hall = hall, Status = ScreeningStatus.SoldOut };
+var s4 = new Screening { Movie = m4, Hall = hall, Status = ScreeningStatus.Available };
 
-screeningsRepo.Add(s1); screeningsRepo.Add(s2); screeningsRepo.Add(s3);
+screeningsRepo.Add(s1); screeningsRepo.Add(s2); screeningsRepo.Add(s3); screeningsRepo.Add(s4);
+
+void SeedTicket(Screening screening, int row, int number, decimal price)
+{
+    var ticket = new Ticket(screening, new Seat(row, number), price);
+    screening.RegisterTicket(ticket);
+    ticketsRepo.Add(ticket);
+}
 
 for (int i = 1; i <= 15; i++)
 {
@@ -28,7 +43,31 @@ for (int i = 1; i <= 15; i++)
     int startRow = i > 10 ? 2 : 1;
     int startSeat = i > 10 ? i - 10 : i;
 
-    ticketsRepo.Add(new Ticket(currentScreening, new Seat(startRow, startSeat), i <= 10 ? 150m : 200m));
+    SeedTicket(currentScreening, startRow, startSeat, i <= 10 ? 150m : 200m);
+}
+
+for (int r = 1; r <= 8; r++)
+    for (int n = 1; n <= (r < 8 ? 10 : 8); n++)
+        SeedTicket(s4, r, n, 150m);
+
+var booking = new BookingService(ticketsRepo, logger);
+var receiptService = new ReceiptService(Console.WriteLine);
+var statisticsService = new StatisticsService();
+
+booking.TicketPurchased += receiptService.Handle;
+booking.TicketPurchased += statisticsService.Handle;
+bool receiptsEnabled = true;
+
+Func<decimal, decimal> ChoosePricing()
+{
+    Console.WriteLine("Тип квитка: 1 - Звичайний, 2 - Студентський (-50%), 3 - Вихідний (+20%)");
+    Console.Write("Ваш вибір: ");
+    return Console.ReadLine() switch
+    {
+        "2" => PricingModifiers.Student,
+        "3" => PricingModifiers.Weekend,
+        _ => PricingModifiers.Regular
+    };
 }
 
 bool isRunning = true;
@@ -41,6 +80,9 @@ while (isRunning)
     Console.WriteLine("1. Показати всі сеанси");
     Console.WriteLine("2. Купити квиток (Матриця місць)");
     Console.WriteLine("3. Показати LINQ-статистику");
+    Console.WriteLine("4. Заповненість сеансів (Predicate + extension methods)");
+    Console.WriteLine("5. Статистика продажів за сесію (StatisticsService)");
+    Console.WriteLine($"6. Чеки: {(receiptsEnabled ? "увімкнено" : "вимкнено")} (підписка/відписка від події)");
     Console.WriteLine("0. Вийти");
     Console.Write("Оберіть дію: ");
 
@@ -88,23 +130,23 @@ while (isRunning)
                     break;
                 }
 
-                bool isSeatTaken = ticketsRepo.GetAll()
-                    .Any(t => t.Screening == selectedScreening && t.Seat.Row == row && t.Seat.Number == seatNumber);
+                var pricing = ChoosePricing();
 
-                if (isSeatTaken)
+                try
                 {
-                    Console.ForegroundColor = ConsoleColor.Red;
-                    Console.WriteLine("\n[ПОМИЛКА] Це місце вже продано! Будь ласка, оберіть інше (зелене).");
-                    Console.ResetColor();
-                }
-                else
-                {
-                   
-                    var newTicket = new Ticket(selectedScreening, new Seat(row, seatNumber), 150m);
-                    ticketsRepo.Add(newTicket);
+                    var newTicket = booking.PurchaseTicket(selectedScreening, new Seat(row, seatNumber), 150m, pricing);
 
                     Console.ForegroundColor = ConsoleColor.Green;
-                    Console.WriteLine($"\n[УСПІХ] Квиток на фільм '{selectedScreening.Movie.Title}' (Ряд {row}, Місце {seatNumber}) успішно придбано!");
+                    Console.WriteLine($"\n[УСПІХ] Квиток на фільм '{selectedScreening.Movie.Title}' (Ряд {row}, Місце {seatNumber}) успішно придбано за {newTicket.Price:F2} грн!");
+                    Console.ResetColor();
+
+                    if (selectedScreening.IsAlmostFull())
+                        Console.WriteLine($"Увага: сеанс майже заповнений ({selectedScreening.GetOccupancy():P0}).");
+                }
+                catch (InvalidOperationException ex)
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine($"\n[ПОМИЛКА] {ex.Message}");
                     Console.ResetColor();
                 }
             }
@@ -116,6 +158,32 @@ while (isRunning)
 
         case "3":
             ShowLinqStatistics(screeningsRepo, ticketsRepo);
+            break;
+
+        case "4":
+            Console.WriteLine("\n--- ЗАПОВНЕНІСТЬ СЕАНСІВ (GetSummary) ---");
+            foreach (var screening in screeningsRepo.GetAll())
+                Console.WriteLine($"- {screening.GetSummary()}");
+
+            var almostFull = screeningsRepo.GetAll().ToList().FindAll(ScreeningPredicates.AlmostFull);
+            Console.WriteLine($"\nСеансів із заповненістю >= 80%: {almostFull.Count}");
+            foreach (var screening in almostFull)
+                Console.WriteLine($"  * {screening.Movie.Title}");
+            break;
+
+        case "5":
+            Console.WriteLine("\n--- СТАТИСТИКА ПРОДАЖІВ ЗА СЕСІЮ ---");
+            Console.WriteLine($"Продано квитків: {statisticsService.TotalTickets}");
+            Console.WriteLine($"Виручка: {statisticsService.TotalRevenue:F2} грн");
+            foreach (var (title, count) in statisticsService.TicketsByMovie)
+                Console.WriteLine($"  - {title}: {count} шт.");
+            break;
+
+        case "6":
+            if (receiptsEnabled) booking.TicketPurchased -= receiptService.Handle;
+            else booking.TicketPurchased += receiptService.Handle;
+            receiptsEnabled = !receiptsEnabled;
+            logger($"ReceiptService {(receiptsEnabled ? "підписано на подію" : "відписано від події")}.");
             break;
 
         case "0":

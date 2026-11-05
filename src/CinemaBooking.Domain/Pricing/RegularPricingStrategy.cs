@@ -4,12 +4,12 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace CinemaBooking.Domain;
+namespace CinemaBooking.Domain.Pricing;
 
-public class StudentPricingStrategy : ITicketPricingStrategy
+public class RegularPricingStrategy : ITicketPricingStrategy
 {
     public decimal CalculatePrice(decimal basePrice)
     {
-        return basePrice * 0.5m; 
+        return basePrice; 
     }
 }

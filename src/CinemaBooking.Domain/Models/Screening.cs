@@ -3,8 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using CinemaBooking.Domain.Pricing;
 
-namespace CinemaBooking.Domain;
+namespace CinemaBooking.Domain.Models;
 
 public class Screening
 {
@@ -26,6 +27,8 @@ public class Screening
         ScreeningStatus.Started => "Розпочато",
         ScreeningStatus.Finished => "Завершено",
         ScreeningStatus.Cancelled => "Скасовано",
+        ScreeningStatus.Available => "Доступно",
+        ScreeningStatus.SoldOut => "Розпродано",
         _ => "Невідомо"
     };
 
@@ -34,6 +37,17 @@ public class Screening
         { Status: ScreeningStatus.SalesOpen, AvailableSeats: 0 } => true,
         _ => false
     };
+
+    public void RegisterTicket(Ticket ticket)
+    {
+        if (!ReferenceEquals(ticket.Screening, this))
+            throw new ArgumentException("Квиток належить іншому сеансу.", nameof(ticket));
+
+        if (_tickets.Any(t => t.Seat == ticket.Seat))
+            throw new InvalidOperationException("Це місце вже продане.");
+
+        _tickets.Add(ticket);
+    }
 
     public void ReserveSeat(int seatNumber, decimal basePrice, ITicketPricingStrategy pricing)
     {
