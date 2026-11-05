@@ -4,6 +4,6 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace CinemaBooking.Domain;
+namespace CinemaBooking.Domain.Models;
 
 public record Ticket(Screening Screening, Seat Seat, decimal Price);
