@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using CinemaBooking.Domain;
+using CinemaBooking.Domain.Exceptions;
 using CinemaBooking.Domain.Extensions;
 using CinemaBooking.Domain.Models;
 using CinemaBooking.Domain.Pricing;
@@ -70,6 +71,19 @@ Func<decimal, decimal> ChoosePricing()
     };
 }
 
+bool TryReadInt(string prompt, out int value)
+{
+    Console.Write(prompt);
+    return int.TryParse(Console.ReadLine(), out value);
+}
+
+void PrintError(string message)
+{
+    Console.ForegroundColor = ConsoleColor.Red;
+    Console.WriteLine($"\n[ПОМИЛКА] {message}");
+    Console.ResetColor();
+}
+
 bool isRunning = true;
 while (isRunning)
 {
@@ -83,6 +97,7 @@ while (isRunning)
     Console.WriteLine("4. Заповненість сеансів (Predicate + extension methods)");
     Console.WriteLine("5. Статистика продажів за сесію (StatisticsService)");
     Console.WriteLine($"6. Чеки: {(receiptsEnabled ? "увімкнено" : "вимкнено")} (підписка/відписка від події)");
+    Console.WriteLine("7. Демонстрація обробки помилок (Lab 6)");
     Console.WriteLine("0. Вийти");
     Console.Write("Оберіть дію: ");
 
@@ -116,17 +131,10 @@ while (isRunning)
 
                 ShowSeatMatrix(selectedScreening, ticketsRepo);
 
-                Console.Write("Введіть номер ряду (1-10): ");
-                int.TryParse(Console.ReadLine(), out int row);
-
-                Console.Write("Введіть номер місця (1-10): ");
-                int.TryParse(Console.ReadLine(), out int seatNumber);
-
-                if (row < 1 || row > 10 || seatNumber < 1 || seatNumber > 10)
+                if (!TryReadInt("Введіть номер ряду (1-10): ", out int row) ||
+                    !TryReadInt("Введіть номер місця (1-10): ", out int seatNumber))
                 {
-                    Console.ForegroundColor = ConsoleColor.Red;
-                    Console.WriteLine("\n[ПОМИЛКА] Такого місця не існує. Оберіть ряд та місце від 1 до 10.");
-                    Console.ResetColor();
+                    PrintError("Потрібно ввести ціле число.");
                     break;
                 }
 
@@ -143,11 +151,17 @@ while (isRunning)
                     if (selectedScreening.IsAlmostFull())
                         Console.WriteLine($"Увага: сеанс майже заповнений ({selectedScreening.GetOccupancy():P0}).");
                 }
+                catch (DomainRuleViolationException ex)
+                {
+                    PrintError($"Порушено правило {ex.Rule}: {ex.GetFriendlyMessage()}");
+                }
                 catch (InvalidOperationException ex)
                 {
-                    Console.ForegroundColor = ConsoleColor.Red;
-                    Console.WriteLine($"\n[ПОМИЛКА] {ex.Message}");
-                    Console.ResetColor();
+                    PrintError(ex.GetFriendlyMessage());
+                }
+                catch (ArgumentException ex)
+                {
+                    PrintError($"Некоректні дані: {ex.GetFriendlyMessage()}");
                 }
             }
             else
@@ -184,6 +198,10 @@ while (isRunning)
             else booking.TicketPurchased += receiptService.Handle;
             receiptsEnabled = !receiptsEnabled;
             logger($"ReceiptService {(receiptsEnabled ? "підписано на подію" : "відписано від події")}.");
+            break;
+
+        case "7":
+            RunErrorHandlingDemo(m1);
             break;
 
         case "0":
@@ -295,4 +313,69 @@ static void ShowLinqStatistics(InMemoryRepository<Screening> screeningsRepo, InM
 
     var movieStatsDict = allTickets.GroupBy(t => t.Screening.Movie.Title).ToDictionary(g => g.Key, g => g.Count());
     Console.WriteLine($"10. Dictionary створено. Записів: {movieStatsDict.Count}");
+}
+
+static void RunErrorHandlingDemo(Movie movie)
+{
+    // Окремий «пісочний» зал і сервіс, щоб демо не змінювало основні дані.
+    var hall = new Hall("Demo Hall", 100);
+    var openScreening = new Screening { Movie = movie, Hall = hall, Status = ScreeningStatus.SalesOpen };
+    var startedScreening = new Screening { Movie = movie, Hall = hall, Status = ScreeningStatus.Started };
+    var service = new BookingService(new InMemoryRepository<Ticket>(), _ => { });
+
+    int purchasedEvents = 0;
+    service.TicketPurchased += (_, _) => purchasedEvents++;
+
+    void Run(string operation, Screening screening, Action action)
+    {
+        int seatsBefore = screening.AvailableSeats;
+        int eventsBefore = purchasedEvents;
+        Console.WriteLine($"\nOperation: {operation}");
+
+        try
+        {
+            action();
+            Console.WriteLine("Result: OK");
+        }
+        catch (DomainRuleViolationException ex)
+        {
+            Console.WriteLine($"Error ({nameof(DomainRuleViolationException)}, rule {ex.Rule}): {ex.GetFriendlyMessage()}");
+        }
+        catch (InvalidOperationException ex)
+        {
+            Console.WriteLine($"Error ({nameof(InvalidOperationException)}): {ex.GetFriendlyMessage()}");
+        }
+        catch (ArgumentException ex)
+        {
+            Console.WriteLine($"Error ({ex.GetType().Name}): {ex.GetFriendlyMessage()}");
+        }
+        finally
+        {
+            Console.WriteLine($"Seats available: {seatsBefore} -> {screening.AvailableSeats}");
+            Console.WriteLine($"TicketPurchased raised: {(purchasedEvents > eventsBefore ? "yes" : "no")}");
+        }
+    }
+
+    Console.WriteLine("\n--- ДЕМОНСТРАЦІЯ ОБРОБКИ ПОМИЛОК ---");
+
+    Run("PurchaseTicket(row 1, seat 1, price 150)  [коректна]", openScreening,
+        () => service.PurchaseTicket(openScreening, new Seat(1, 1), 150m, PricingModifiers.Regular));
+
+    Run("new Seat(row = -1, seat = 5)", openScreening,
+        () => service.PurchaseTicket(openScreening, new Seat(-1, 5), 150m, PricingModifiers.Regular));
+
+    Run("PurchaseTicket(price = 0)", openScreening,
+        () => service.PurchaseTicket(openScreening, new Seat(2, 2), 0m, PricingModifiers.Regular));
+
+    Run("PurchaseTicket(row 11, seat 1)  [такого місця немає в залі]", openScreening,
+        () => service.PurchaseTicket(openScreening, new Seat(11, 1), 150m, PricingModifiers.Regular));
+
+    Run("PurchaseTicket(row 1, seat 1)  [місце вже зайняте]", openScreening,
+        () => service.PurchaseTicket(openScreening, new Seat(1, 1), 150m, PricingModifiers.Regular));
+
+    Run("PurchaseTicket на сеанс, який уже розпочався", startedScreening,
+        () => service.PurchaseTicket(startedScreening, new Seat(3, 3), 150m, PricingModifiers.Regular));
+
+    Run("OpenSales на сеанс, який уже розпочався", startedScreening,
+        () => service.OpenSales(startedScreening));
 }
