@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using CinemaBooking.Domain.Exceptions;
 using CinemaBooking.Domain.Pricing;
 
 namespace CinemaBooking.Domain.Models;
@@ -38,13 +39,43 @@ public class Screening
         _ => false
     };
 
+    /// <summary>Кидає InvalidOperationException, якщо продаж квитків на сеанс недоступний.</summary>
+    public void EnsureSalesOpen()
+    {
+        switch (Status)
+        {
+            case ScreeningStatus.SalesOpen:
+            case ScreeningStatus.Available:
+                return;
+            case ScreeningStatus.Scheduled:
+                throw new InvalidOperationException("Продаж на цей сеанс ще не відкрито.");
+            case ScreeningStatus.Started:
+            case ScreeningStatus.Finished:
+                throw new InvalidOperationException("Сеанс уже розпочато або завершено, продаж закрито.");
+            case ScreeningStatus.Cancelled:
+                throw new InvalidOperationException("Сеанс скасовано.");
+            case ScreeningStatus.SoldOut:
+                throw new InvalidOperationException("Усі квитки на цей сеанс розпродано.");
+            default:
+                throw new InvalidOperationException("Продаж на цей сеанс недоступний.");
+        }
+    }
+
     public void RegisterTicket(Ticket ticket)
     {
+        // Спочатку всі перевірки, і лише потім зміна стану.
+        ArgumentNullException.ThrowIfNull(ticket);
+
         if (!ReferenceEquals(ticket.Screening, this))
             throw new ArgumentException("Квиток належить іншому сеансу.", nameof(ticket));
 
+        if (!Hall.HasSeat(ticket.Seat))
+            throw new ArgumentOutOfRangeException(nameof(ticket), ticket.Seat,
+                $"У залі '{Hall.Name}' немає місця: ряд {ticket.Seat.Row}, місце {ticket.Seat.Number}.");
+
         if (_tickets.Any(t => t.Seat == ticket.Seat))
-            throw new InvalidOperationException("Це місце вже продане.");
+            throw new DomainRuleViolationException(DomainRules.SeatAlreadyTaken,
+                $"Місце вже зайняте: ряд {ticket.Seat.Row}, місце {ticket.Seat.Number}.");
 
         _tickets.Add(ticket);
     }
