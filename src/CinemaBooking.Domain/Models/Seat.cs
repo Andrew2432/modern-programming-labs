@@ -1,9 +1,18 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿namespace CinemaBooking.Domain.Models;
 
-namespace CinemaBooking.Domain.Models;
+public record Seat
+{
+    public int Row { get; }
+    public int Number { get; }
 
-public record Seat(int Row, int Number);
+    public Seat(int row, int number)
+    {
+        if (row <= 0)
+            throw new ArgumentOutOfRangeException(nameof(row), row, "Номер ряду має бути більшим за нуль.");
+        if (number <= 0)
+            throw new ArgumentOutOfRangeException(nameof(number), number, "Номер місця має бути більшим за нуль.");
+
+        Row = row;
+        Number = number;
+    }
+}
