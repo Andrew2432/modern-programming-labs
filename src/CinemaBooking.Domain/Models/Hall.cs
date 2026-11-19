@@ -42,7 +42,6 @@ public class Hall
         TotalSeats = totalSeats;
     }
 
-    /// <summary>Чи існує таке місце в цьому залі.</summary>
     public bool HasSeat(Seat seat)
     {
         ArgumentNullException.ThrowIfNull(seat);

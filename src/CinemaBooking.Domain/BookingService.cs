@@ -46,26 +46,23 @@ public sealed class BookingService(InMemoryRepository<Ticket> tickets, Action<st
         Ticket ticket;
         try
         {
-            // 1. Усі перевірки. Стан сеансу та репозиторію ще не змінено.
             if (basePrice <= 0)
                 throw new ArgumentOutOfRangeException(nameof(basePrice), basePrice, "Ціна квитка має бути більшою за нуль.");
 
             screening.EnsureSalesOpen();
             ticket = new Ticket(screening, seat, priceModifier(basePrice));
 
-            // 2. Зміна стану (всередині ще раз перевіряє зал і зайняті місця).
             screening.RegisterTicket(ticket);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
             logger($"Відмова: {ex.GetFriendlyMessage()}");
-            throw; // throw; зберігає початковий стек викликів
+            throw; 
         }
 
         tickets.Add(ticket);
         logger($"Квиток продано за {ticket.Price:F2} грн.");
 
-        // 3. Подія лише після успішної зміни стану.
         TicketPurchased?.Invoke(this, new TicketPurchasedEventArgs(ticket));
         return ticket;
     }
