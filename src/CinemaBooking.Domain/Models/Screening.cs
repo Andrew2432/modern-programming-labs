@@ -13,7 +13,8 @@ public class Screening
     public Guid Id { get; } = Guid.NewGuid();
     public required Movie Movie { get; init; }
     public required Hall Hall { get; init; }
-    
+    public DateTime StartsAt { get; init; } = DateTime.Now;
+
     public ScreeningStatus Status { get; set; } = ScreeningStatus.Scheduled;
 
     private readonly List<Ticket> _tickets = new();
@@ -39,7 +40,6 @@ public class Screening
         _ => false
     };
 
-    /// <summary>Кидає InvalidOperationException, якщо продаж квитків на сеанс недоступний.</summary>
     public void EnsureSalesOpen()
     {
         switch (Status)
@@ -63,7 +63,6 @@ public class Screening
 
     public void RegisterTicket(Ticket ticket)
     {
-        // Спочатку всі перевірки, і лише потім зміна стану.
         ArgumentNullException.ThrowIfNull(ticket);
 
         if (!ReferenceEquals(ticket.Screening, this))
