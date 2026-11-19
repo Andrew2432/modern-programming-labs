@@ -208,3 +208,6 @@ FakesAssemblies/
 
 # JetBrains Rider
 *.sln.iml
+
+# Згенеровані звіти Lab 7
+**/data/*.json

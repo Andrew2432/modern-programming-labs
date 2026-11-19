@@ -4,10 +4,7 @@ namespace CinemaBooking.Domain.Extensions;
 
 public static class ExceptionExtensions
 {
-    /// <summary>
-    /// Повідомлення винятку без службових доважків .NET
-    /// («(Parameter 'x')», «Actual value was ...») для виводу користувачу.
-    /// </summary>
+
     public static string GetFriendlyMessage(this Exception exception)
     {
         ArgumentNullException.ThrowIfNull(exception);
