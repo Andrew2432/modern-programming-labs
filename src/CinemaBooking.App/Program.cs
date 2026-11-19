@@ -1,13 +1,31 @@
 ﻿using System.Text;
+using CinemaBooking.App.Services;
 using CinemaBooking.Domain;
 using CinemaBooking.Domain.Exceptions;
 using CinemaBooking.Domain.Extensions;
 using CinemaBooking.Domain.Models;
 using CinemaBooking.Domain.Pricing;
+using CinemaBooking.Domain.Reports;
 using CinemaBooking.Domain.Repositories;
 using CinemaBooking.Domain.Services;
+using Microsoft.Extensions.Configuration;
 
 Console.OutputEncoding = Encoding.UTF8;
+
+var configFile = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
+var config = new ConfigurationBuilder()
+    .AddJsonFile(configFile, optional: false, reloadOnChange: true)
+    .Build();
+
+string relativePath = config["Storage:FilePath"]
+    ?? throw new InvalidOperationException("Параметр Storage:FilePath не налаштовано в appsettings.json.");
+
+bool writeIndented = bool.TryParse(config["Storage:WriteIndented"], out bool parsedIndented)
+    ? parsedIndented
+    : true;
+
+string reportFilePath = Path.Combine(AppContext.BaseDirectory, relativePath);
+var reportStorage = new ScreeningReportStorage();
 
 Action<string> logger = message => Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {message}");
 
@@ -21,15 +39,17 @@ var m1 = new Movie { Title = "Dune", Description = "Sci-Fi", DurationMinutes = 1
 var m2 = new Movie { Title = "Matrix", Description = "Action", DurationMinutes = 136 };
 var m3 = new Movie { Title = "Avatar", Description = "Sci-Fi", DurationMinutes = 162 };
 var m4 = new Movie { Title = "Interstellar", Description = "Sci-Fi", DurationMinutes = 169 };
+var m5 = new Movie { Title = "Oppenheimer", Description = "Drama", DurationMinutes = 180 };
 
-moviesRepo.Add(m1); moviesRepo.Add(m2); moviesRepo.Add(m3); moviesRepo.Add(m4);
+moviesRepo.Add(m1); moviesRepo.Add(m2); moviesRepo.Add(m3); moviesRepo.Add(m4); moviesRepo.Add(m5);
 
 var s1 = new Screening { Movie = m1, Hall = hall, Status = ScreeningStatus.Available };
 var s2 = new Screening { Movie = m2, Hall = hall, Status = ScreeningStatus.Available };
 var s3 = new Screening { Movie = m3, Hall = hall, Status = ScreeningStatus.SoldOut };
 var s4 = new Screening { Movie = m4, Hall = hall, Status = ScreeningStatus.Available };
+var s5 = new Screening { Movie = m5, Hall = hall, Status = ScreeningStatus.Available };
 
-screeningsRepo.Add(s1); screeningsRepo.Add(s2); screeningsRepo.Add(s3); screeningsRepo.Add(s4);
+screeningsRepo.Add(s1); screeningsRepo.Add(s2); screeningsRepo.Add(s3); screeningsRepo.Add(s4); screeningsRepo.Add(s5);
 
 void SeedTicket(Screening screening, int row, int number, decimal price)
 {
@@ -50,6 +70,9 @@ for (int i = 1; i <= 15; i++)
 for (int r = 1; r <= 8; r++)
     for (int n = 1; n <= (r < 8 ? 10 : 8); n++)
         SeedTicket(s4, r, n, 150m);
+
+for (int n = 1; n <= 6; n++)
+    SeedTicket(s5, 1, n, 180m);
 
 var booking = new BookingService(ticketsRepo, logger);
 var receiptService = new ReceiptService(Console.WriteLine);
@@ -98,6 +121,8 @@ while (isRunning)
     Console.WriteLine("5. Статистика продажів за сесію (StatisticsService)");
     Console.WriteLine($"6. Чеки: {(receiptsEnabled ? "увімкнено" : "вимкнено")} (підписка/відписка від події)");
     Console.WriteLine("7. Демонстрація обробки помилок (Lab 6)");
+    Console.WriteLine("8. Експортувати звіт по сеансах у JSON (Lab 7)");
+    Console.WriteLine("9. Прочитати звіт із JSON та підрахувати дохід (Lab 7)");
     Console.WriteLine("0. Вийти");
     Console.Write("Оберіть дію: ");
 
@@ -204,6 +229,55 @@ while (isRunning)
             RunErrorHandlingDemo(m1);
             break;
 
+        case "8":
+            {
+                var screeningsList = screeningsRepo.GetAll().ToList();
+                var ticketsList = ticketsRepo.GetAll().ToList();
+
+                var reports = screeningsList
+                    .Select(s =>
+                    {
+                        var screeningTickets = ticketsList.Where(t => t.Screening == s).ToList();
+                        return new ScreeningReport(
+                            ScreeningId: s.Id,
+                            MovieTitle: s.Movie.Title,
+                            StartsAt: s.StartsAt, // якщо у твоєму Screening.cs поле називається StartTime — заміни на s.StartTime
+                            TicketsSold: screeningTickets.Count,
+                            Revenue: screeningTickets.Sum(t => t.Price));
+                    })
+                    .ToList();
+
+                await reportStorage.SaveAsync(reportFilePath, reports, writeIndented);
+                logger($"Експортовано {reports.Count} записів у JSON.");
+                break;
+            }
+
+        case "9":
+            {
+                var loadedReports = await reportStorage.LoadAsync(reportFilePath);
+
+                if (loadedReports.Count > 0)
+                {
+                    Console.WriteLine("\n--- ЗВІТ ПО СЕАНСАХ (ДЕСЕРІАЛІЗОВАНО З JSON) ---");
+                    foreach (var item in loadedReports)
+                    {
+                        Console.WriteLine(
+                            $"ID: {item.ScreeningId.ToString()[..8]}... | " +
+                            $"Фільм: {item.MovieTitle,-14} | " +
+                            $"Початок: {item.StartsAt:dd.MM.yyyy HH:mm} | " +
+                            $"Продано: {item.TicketsSold,2} шт. | " +
+                            $"Дохід: {item.Revenue,8:F2} грн");
+                    }
+
+                    decimal totalRevenue = loadedReports.Sum(r => r.Revenue);
+                    Console.ForegroundColor = ConsoleColor.Cyan;
+                    Console.WriteLine($"\nЗАГАЛЬНИЙ ДОХІД ВІД КВИТКІВ (ЗІ ЗВІТУ): {totalRevenue:F2} грн");
+                    Console.ResetColor();
+                    logger($"Успішно прочитано {loadedReports.Count} записів із JSON.");
+                }
+                break;
+            }
+
         case "0":
             isRunning = false;
             Console.WriteLine("\nДякуємо за використання системи! До побачення.");
@@ -231,10 +305,9 @@ static void ShowSeatMatrix(Screening screening, InMemoryRepository<Ticket> ticke
 
     for (int r = 1; r <= 10; r++)
     {
-        Console.Write($"{r,2} "); 
+        Console.Write($"{r,2} ");
         for (int s = 1; s <= 10; s++)
         {
-          
             bool isTaken = takenSeats.Any(seat => seat.Row == r && seat.Number == s);
 
             if (isTaken)
@@ -317,7 +390,6 @@ static void ShowLinqStatistics(InMemoryRepository<Screening> screeningsRepo, InM
 
 static void RunErrorHandlingDemo(Movie movie)
 {
-    // Окремий «пісочний» зал і сервіс, щоб демо не змінювало основні дані.
     var hall = new Hall("Demo Hall", 100);
     var openScreening = new Screening { Movie = movie, Hall = hall, Status = ScreeningStatus.SalesOpen };
     var startedScreening = new Screening { Movie = movie, Hall = hall, Status = ScreeningStatus.Started };
