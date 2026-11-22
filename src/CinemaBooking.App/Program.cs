@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Diagnostics;
+using System.Text;
 using CinemaBooking.App.Services;
 using CinemaBooking.Domain;
 using CinemaBooking.Domain.Exceptions;
@@ -30,7 +31,6 @@ var reportStorage = new ScreeningReportStorage();
 string apiBaseUrl = config["ExternalApi:BaseUrl"]
     ?? throw new InvalidOperationException("Параметр ExternalApi:BaseUrl не налаштовано в appsettings.json.");
 
-// Один HttpClient для всіх запитів.
 using var httpClient = new HttpClient { BaseAddress = new Uri(apiBaseUrl) };
 var userService = new ExternalUserService(httpClient);
 
@@ -469,9 +469,17 @@ async Task ShowVisitorContactsAsync(ExternalUserService userService)
     Console.WriteLine("\n--- КОНТАКТИ ВІДВІДУВАЧІВ (для майбутніх повідомлень про сеанси) ---");
     Console.WriteLine("Loading external contacts...");
 
-    foreach (int id in new[] { 1, 2, 3 })
-    {
-        ExternalUser? user = await userService.GetUserAsync(id, CancellationToken.None);
-        Console.WriteLine($"{user?.Id} | {user?.Name} | {user?.Email}");
-    }
+    var watch = Stopwatch.StartNew();
+
+    var tasks = new[] { 1, 2, 3 }.Select(id => userService.GetUserAsync(id, CancellationToken.None));
+    ExternalUser?[] users = await Task.WhenAll(tasks);
+
+    watch.Stop();
+
+    var contacts = users.OfType<ExternalUser>().ToList();
+    Console.WriteLine($"Received: {contacts.Count}");
+    foreach (var user in contacts)
+        Console.WriteLine($"{user.Id} | {user.Name} | {user.Email}");
+
+    Console.WriteLine($"Час виконання: {watch.ElapsedMilliseconds} мс");
 }
