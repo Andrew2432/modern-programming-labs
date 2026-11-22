@@ -470,12 +470,28 @@ static void RunErrorHandlingDemo(Movie movie)
         () => service.OpenSales(startedScreening));
 }
 
+string DescribeHttpError(HttpRequestException ex)
+{
+  
+    int? code = (int?)ex.StatusCode;
+
+    if (code is null)
+        return $"Сервер не відповів: {ex.Message}";
+    if (code >= 500)
+        return $"Помилка на боці сервера ({code}). Спробуйте пізніше.";
+    if (code == 404)
+        return "Ресурс не знайдено (404).";
+    if (code >= 400)
+        return $"Помилка запиту клієнта ({code}).";
+    return $"Неочікувана відповідь сервера ({code}).";
+}
+
 async Task ShowVisitorContactsAsync(ExternalUserService userService)
 {
     Console.WriteLine("\n--- КОНТАКТИ ВІДВІДУВАЧІВ (для майбутніх повідомлень про сеанси) ---");
     Console.WriteLine("Loading external contacts...");
 
-    // Обмеження часу очікування: 10 секунд на всі запити.
+
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
     var watch = Stopwatch.StartNew();
 
@@ -499,7 +515,7 @@ async Task ShowVisitorContactsAsync(ExternalUserService userService)
     }
     catch (HttpRequestException ex)
     {
-        PrintError($"Помилка мережі або HTTP: {ex.Message}");
+        PrintError(DescribeHttpError(ex));
     }
     catch (JsonException ex)
     {
@@ -533,7 +549,7 @@ async Task CompareLoadingTimeAsync(ExternalUserService userService)
     }
     catch (HttpRequestException ex)
     {
-        PrintError($"Помилка мережі або HTTP: {ex.Message}");
+        PrintError(DescribeHttpError(ex));
     }
     catch (JsonException ex)
     {
