@@ -132,6 +132,7 @@ while (isRunning)
     Console.WriteLine("8. Експортувати звіт по сеансах у JSON (Lab 7)");
     Console.WriteLine("9. Прочитати звіт із JSON та підрахувати дохід (Lab 7)");
     Console.WriteLine("10. Контакти відвідувачів із зовнішнього API (Lab 8)");
+    Console.WriteLine("11. Порівняти час: послідовно та Task.WhenAll (Lab 8)");
     Console.WriteLine("0. Вийти");
     Console.Write("Оберіть дію: ");
 
@@ -289,6 +290,10 @@ while (isRunning)
 
         case "10":
             await ShowVisitorContactsAsync(userService);
+            break;
+
+        case "11":
+            await CompareLoadingTimeAsync(userService);
             break;
 
         case "0":
@@ -470,6 +475,7 @@ async Task ShowVisitorContactsAsync(ExternalUserService userService)
     Console.WriteLine("\n--- КОНТАКТИ ВІДВІДУВАЧІВ (для майбутніх повідомлень про сеанси) ---");
     Console.WriteLine("Loading external contacts...");
 
+    // Обмеження часу очікування: 10 секунд на всі запити.
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
     var watch = Stopwatch.StartNew();
 
@@ -486,6 +492,40 @@ async Task ShowVisitorContactsAsync(ExternalUserService userService)
             Console.WriteLine($"{user.Id} | {user.Name} | {user.Email}");
 
         Console.WriteLine($"Час виконання: {watch.ElapsedMilliseconds} мс");
+    }
+    catch (OperationCanceledException)
+    {
+        PrintError("Час очікування вичерпано (10 с) або операцію скасовано.");
+    }
+    catch (HttpRequestException ex)
+    {
+        PrintError($"Помилка мережі або HTTP: {ex.Message}");
+    }
+    catch (JsonException ex)
+    {
+        PrintError($"Сервер повернув некоректний JSON: {ex.Message}");
+    }
+}
+
+async Task CompareLoadingTimeAsync(ExternalUserService userService)
+{
+    Console.WriteLine("\n--- ПОРІВНЯННЯ: ПОСЛІДОВНО ТА Task.WhenAll ---");
+
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+    try
+    {
+        var watch = Stopwatch.StartNew();
+        foreach (int id in new[] { 1, 2, 3 })
+            await userService.GetUserAsync(id, cts.Token);
+        watch.Stop();
+        Console.WriteLine($"Послідовно (await по черзі): {watch.ElapsedMilliseconds} мс");
+
+        watch.Restart();
+        var tasks = new[] { 1, 2, 3 }.Select(id => userService.GetUserAsync(id, cts.Token));
+        await Task.WhenAll(tasks);
+        watch.Stop();
+        Console.WriteLine($"Одночасно (Task.WhenAll):    {watch.ElapsedMilliseconds} мс");
     }
     catch (OperationCanceledException)
     {
