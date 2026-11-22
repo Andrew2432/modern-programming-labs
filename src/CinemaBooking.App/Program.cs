@@ -27,6 +27,13 @@ bool writeIndented = bool.TryParse(config["Storage:WriteIndented"], out bool par
 string reportFilePath = Path.Combine(AppContext.BaseDirectory, relativePath);
 var reportStorage = new ScreeningReportStorage();
 
+string apiBaseUrl = config["ExternalApi:BaseUrl"]
+    ?? throw new InvalidOperationException("Параметр ExternalApi:BaseUrl не налаштовано в appsettings.json.");
+
+// Один HttpClient для всіх запитів.
+using var httpClient = new HttpClient { BaseAddress = new Uri(apiBaseUrl) };
+var userService = new ExternalUserService(httpClient);
+
 Action<string> logger = message => Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {message}");
 
 var moviesRepo = new InMemoryRepository<Movie>();
@@ -123,6 +130,7 @@ while (isRunning)
     Console.WriteLine("7. Демонстрація обробки помилок (Lab 6)");
     Console.WriteLine("8. Експортувати звіт по сеансах у JSON (Lab 7)");
     Console.WriteLine("9. Прочитати звіт із JSON та підрахувати дохід (Lab 7)");
+    Console.WriteLine("10. Контакти відвідувачів із зовнішнього API (Lab 8)");
     Console.WriteLine("0. Вийти");
     Console.Write("Оберіть дію: ");
 
@@ -241,7 +249,7 @@ while (isRunning)
                         return new ScreeningReport(
                             ScreeningId: s.Id,
                             MovieTitle: s.Movie.Title,
-                            StartsAt: s.StartsAt, // якщо у твоєму Screening.cs поле називається StartTime — заміни на s.StartTime
+                            StartsAt: s.StartsAt,
                             TicketsSold: screeningTickets.Count,
                             Revenue: screeningTickets.Sum(t => t.Price));
                     })
@@ -277,6 +285,10 @@ while (isRunning)
                 }
                 break;
             }
+
+        case "10":
+            await ShowVisitorContactsAsync(userService);
+            break;
 
         case "0":
             isRunning = false;
@@ -450,4 +462,16 @@ static void RunErrorHandlingDemo(Movie movie)
 
     Run("OpenSales на сеанс, який уже розпочався", startedScreening,
         () => service.OpenSales(startedScreening));
+}
+
+async Task ShowVisitorContactsAsync(ExternalUserService userService)
+{
+    Console.WriteLine("\n--- КОНТАКТИ ВІДВІДУВАЧІВ (для майбутніх повідомлень про сеанси) ---");
+    Console.WriteLine("Loading external contacts...");
+
+    foreach (int id in new[] { 1, 2, 3 })
+    {
+        ExternalUser? user = await userService.GetUserAsync(id, CancellationToken.None);
+        Console.WriteLine($"{user?.Id} | {user?.Name} | {user?.Email}");
+    }
 }
