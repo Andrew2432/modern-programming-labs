@@ -1,4 +1,6 @@
-﻿using System.Text;
+﻿using System.Diagnostics;
+using System.Text;
+using System.Text.Json;
 using CinemaBooking.App.Services;
 using CinemaBooking.Domain;
 using CinemaBooking.Domain.Exceptions;
@@ -26,6 +28,12 @@ bool writeIndented = bool.TryParse(config["Storage:WriteIndented"], out bool par
 
 string reportFilePath = Path.Combine(AppContext.BaseDirectory, relativePath);
 var reportStorage = new ScreeningReportStorage();
+
+string apiBaseUrl = config["ExternalApi:BaseUrl"]
+    ?? throw new InvalidOperationException("Параметр ExternalApi:BaseUrl не налаштовано в appsettings.json.");
+
+using var httpClient = new HttpClient { BaseAddress = new Uri(apiBaseUrl) };
+var userService = new ExternalUserService(httpClient);
 
 Action<string> logger = message => Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {message}");
 
@@ -123,6 +131,8 @@ while (isRunning)
     Console.WriteLine("7. Демонстрація обробки помилок (Lab 6)");
     Console.WriteLine("8. Експортувати звіт по сеансах у JSON (Lab 7)");
     Console.WriteLine("9. Прочитати звіт із JSON та підрахувати дохід (Lab 7)");
+    Console.WriteLine("10. Контакти відвідувачів із зовнішнього API (Lab 8)");
+    Console.WriteLine("11. Порівняти час: послідовно та Task.WhenAll (Lab 8)");
     Console.WriteLine("0. Вийти");
     Console.Write("Оберіть дію: ");
 
@@ -241,7 +251,7 @@ while (isRunning)
                         return new ScreeningReport(
                             ScreeningId: s.Id,
                             MovieTitle: s.Movie.Title,
-                            StartsAt: s.StartsAt, // якщо у твоєму Screening.cs поле називається StartTime — заміни на s.StartTime
+                            StartsAt: s.StartsAt,
                             TicketsSold: screeningTickets.Count,
                             Revenue: screeningTickets.Sum(t => t.Price));
                     })
@@ -277,6 +287,14 @@ while (isRunning)
                 }
                 break;
             }
+
+        case "10":
+            await ShowVisitorContactsAsync(userService);
+            break;
+
+        case "11":
+            await CompareLoadingTimeAsync(userService);
+            break;
 
         case "0":
             isRunning = false;
@@ -450,4 +468,91 @@ static void RunErrorHandlingDemo(Movie movie)
 
     Run("OpenSales на сеанс, який уже розпочався", startedScreening,
         () => service.OpenSales(startedScreening));
+}
+
+string DescribeHttpError(HttpRequestException ex)
+{
+  
+    int? code = (int?)ex.StatusCode;
+
+    if (code is null)
+        return $"Сервер не відповів: {ex.Message}";
+    if (code >= 500)
+        return $"Помилка на боці сервера ({code}). Спробуйте пізніше.";
+    if (code == 404)
+        return "Ресурс не знайдено (404).";
+    if (code >= 400)
+        return $"Помилка запиту клієнта ({code}).";
+    return $"Неочікувана відповідь сервера ({code}).";
+}
+
+async Task ShowVisitorContactsAsync(ExternalUserService userService)
+{
+    Console.WriteLine("\n--- КОНТАКТИ ВІДВІДУВАЧІВ (для майбутніх повідомлень про сеанси) ---");
+    Console.WriteLine("Loading external contacts...");
+
+
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+    var watch = Stopwatch.StartNew();
+
+    try
+    {
+        var tasks = new[] { 1, 2, 3 }.Select(id => userService.GetUserAsync(id, cts.Token));
+        ExternalUser?[] users = await Task.WhenAll(tasks);
+
+        watch.Stop();
+
+        var contacts = users.OfType<ExternalUser>().ToList();
+        Console.WriteLine($"Received: {contacts.Count}");
+        foreach (var user in contacts)
+            Console.WriteLine($"{user.Id} | {user.Name} | {user.Email}");
+
+        Console.WriteLine($"Час виконання: {watch.ElapsedMilliseconds} мс");
+    }
+    catch (OperationCanceledException)
+    {
+        PrintError("Час очікування вичерпано (10 с) або операцію скасовано.");
+    }
+    catch (HttpRequestException ex)
+    {
+        PrintError(DescribeHttpError(ex));
+    }
+    catch (JsonException ex)
+    {
+        PrintError($"Сервер повернув некоректний JSON: {ex.Message}");
+    }
+}
+
+async Task CompareLoadingTimeAsync(ExternalUserService userService)
+{
+    Console.WriteLine("\n--- ПОРІВНЯННЯ: ПОСЛІДОВНО ТА Task.WhenAll ---");
+
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+    try
+    {
+        var watch = Stopwatch.StartNew();
+        foreach (int id in new[] { 1, 2, 3 })
+            await userService.GetUserAsync(id, cts.Token);
+        watch.Stop();
+        Console.WriteLine($"Послідовно (await по черзі): {watch.ElapsedMilliseconds} мс");
+
+        watch.Restart();
+        var tasks = new[] { 1, 2, 3 }.Select(id => userService.GetUserAsync(id, cts.Token));
+        await Task.WhenAll(tasks);
+        watch.Stop();
+        Console.WriteLine($"Одночасно (Task.WhenAll):    {watch.ElapsedMilliseconds} мс");
+    }
+    catch (OperationCanceledException)
+    {
+        PrintError("Час очікування вичерпано (10 с) або операцію скасовано.");
+    }
+    catch (HttpRequestException ex)
+    {
+        PrintError(DescribeHttpError(ex));
+    }
+    catch (JsonException ex)
+    {
+        PrintError($"Сервер повернув некоректний JSON: {ex.Message}");
+    }
 }
