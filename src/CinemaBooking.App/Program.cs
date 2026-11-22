@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Text;
+using System.Text.Json;
 using CinemaBooking.App.Services;
 using CinemaBooking.Domain;
 using CinemaBooking.Domain.Exceptions;
@@ -469,17 +470,33 @@ async Task ShowVisitorContactsAsync(ExternalUserService userService)
     Console.WriteLine("\n--- КОНТАКТИ ВІДВІДУВАЧІВ (для майбутніх повідомлень про сеанси) ---");
     Console.WriteLine("Loading external contacts...");
 
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
     var watch = Stopwatch.StartNew();
 
-    var tasks = new[] { 1, 2, 3 }.Select(id => userService.GetUserAsync(id, CancellationToken.None));
-    ExternalUser?[] users = await Task.WhenAll(tasks);
+    try
+    {
+        var tasks = new[] { 1, 2, 3 }.Select(id => userService.GetUserAsync(id, cts.Token));
+        ExternalUser?[] users = await Task.WhenAll(tasks);
 
-    watch.Stop();
+        watch.Stop();
 
-    var contacts = users.OfType<ExternalUser>().ToList();
-    Console.WriteLine($"Received: {contacts.Count}");
-    foreach (var user in contacts)
-        Console.WriteLine($"{user.Id} | {user.Name} | {user.Email}");
+        var contacts = users.OfType<ExternalUser>().ToList();
+        Console.WriteLine($"Received: {contacts.Count}");
+        foreach (var user in contacts)
+            Console.WriteLine($"{user.Id} | {user.Name} | {user.Email}");
 
-    Console.WriteLine($"Час виконання: {watch.ElapsedMilliseconds} мс");
+        Console.WriteLine($"Час виконання: {watch.ElapsedMilliseconds} мс");
+    }
+    catch (OperationCanceledException)
+    {
+        PrintError("Час очікування вичерпано (10 с) або операцію скасовано.");
+    }
+    catch (HttpRequestException ex)
+    {
+        PrintError($"Помилка мережі або HTTP: {ex.Message}");
+    }
+    catch (JsonException ex)
+    {
+        PrintError($"Сервер повернув некоректний JSON: {ex.Message}");
+    }
 }
