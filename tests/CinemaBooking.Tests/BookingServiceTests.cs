@@ -8,7 +8,7 @@ namespace CinemaBooking.Tests;
 
 public class BookingServiceTests
 {
-    // Кожен тест створює власні дані, тому тести не залежать один від одного.
+   
     private static Screening CreateScreening(ScreeningStatus status = ScreeningStatus.SalesOpen)
     {
         return new Screening
@@ -24,21 +24,63 @@ public class BookingServiceTests
         return new BookingService(new InMemoryRepository<Ticket>(), _ => { });
     }
 
-    // 1. Успішне бронювання вільного місця.
     [Fact]
     public void PurchaseTicket_WhenSeatIsFree_ReturnsTicketForThatSeat()
     {
-        // Arrange
+       
         var service = CreateService();
         var screening = CreateScreening();
         var seat = new Seat(1, 5);
 
-        // Act
         Ticket ticket = service.PurchaseTicket(screening, seat, 100m, price => price);
 
-        // Assert
         Assert.Equal(seat, ticket.Seat);
         Assert.Equal(100m, ticket.Price);
         Assert.Single(screening.Tickets);
+    }
+
+    [Fact]
+    public void PurchaseTicket_WhenSeatIsFree_DecreasesAvailableSeats()
+    {
+      
+        var service = CreateService();
+        var screening = CreateScreening();
+        int seatsBefore = screening.AvailableSeats;
+
+        service.PurchaseTicket(screening, new Seat(1, 5), 100m, price => price);
+
+        Assert.Equal(seatsBefore - 1, screening.AvailableSeats);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(-5)]
+    public void PurchaseTicket_WhenSeatNumberIsZeroOrNegative_ThrowsArgumentOutOfRange(int seatNumber)
+    {
+        var service = CreateService();
+        var screening = CreateScreening();
+
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => service.PurchaseTicket(screening, new Seat(1, seatNumber), 100m, price => price));
+
+        Assert.Empty(screening.Tickets);
+        Assert.Equal(10, screening.AvailableSeats);
+    }
+
+    [Theory]
+    [InlineData(ScreeningStatus.Scheduled)]
+    [InlineData(ScreeningStatus.Finished)]
+    [InlineData(ScreeningStatus.Cancelled)]
+    public void PurchaseTicket_WhenSalesAreClosed_ThrowsInvalidOperation(ScreeningStatus status)
+    {
+        
+        var service = CreateService();
+        var screening = CreateScreening(status);
+
+        Assert.Throws<InvalidOperationException>(
+            () => service.PurchaseTicket(screening, new Seat(1, 5), 100m, price => price));
+
+        Assert.Empty(screening.Tickets);
     }
 }
