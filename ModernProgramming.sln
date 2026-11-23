@@ -9,6 +9,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CinemaBooking.App", "src\Ci
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CinemaBooking.Domain", "src\CinemaBooking.Domain\CinemaBooking.Domain.csproj", "{AE9834A3-C4C5-4822-8C69-17B616369C3F}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CinemaBooking.Tests", "tests\CinemaBooking.Tests\CinemaBooking.Tests.csproj", "{C0383856-C5C7-421F-A89C-87C0A3F5BDDF}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -43,6 +47,18 @@ Global
 		{AE9834A3-C4C5-4822-8C69-17B616369C3F}.Release|x64.Build.0 = Release|Any CPU
 		{AE9834A3-C4C5-4822-8C69-17B616369C3F}.Release|x86.ActiveCfg = Release|Any CPU
 		{AE9834A3-C4C5-4822-8C69-17B616369C3F}.Release|x86.Build.0 = Release|Any CPU
+		{C0383856-C5C7-421F-A89C-87C0A3F5BDDF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C0383856-C5C7-421F-A89C-87C0A3F5BDDF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C0383856-C5C7-421F-A89C-87C0A3F5BDDF}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{C0383856-C5C7-421F-A89C-87C0A3F5BDDF}.Debug|x64.Build.0 = Debug|Any CPU
+		{C0383856-C5C7-421F-A89C-87C0A3F5BDDF}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{C0383856-C5C7-421F-A89C-87C0A3F5BDDF}.Debug|x86.Build.0 = Debug|Any CPU
+		{C0383856-C5C7-421F-A89C-87C0A3F5BDDF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C0383856-C5C7-421F-A89C-87C0A3F5BDDF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C0383856-C5C7-421F-A89C-87C0A3F5BDDF}.Release|x64.ActiveCfg = Release|Any CPU
+		{C0383856-C5C7-421F-A89C-87C0A3F5BDDF}.Release|x64.Build.0 = Release|Any CPU
+		{C0383856-C5C7-421F-A89C-87C0A3F5BDDF}.Release|x86.ActiveCfg = Release|Any CPU
+		{C0383856-C5C7-421F-A89C-87C0A3F5BDDF}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -50,5 +66,6 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{F86A9E62-71A4-4F74-83F7-EF50EBC195B8} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{AE9834A3-C4C5-4822-8C69-17B616369C3F} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{C0383856-C5C7-421F-A89C-87C0A3F5BDDF} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal
