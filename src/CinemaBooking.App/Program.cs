@@ -12,6 +12,7 @@ using CinemaBooking.Domain.Repositories;
 using CinemaBooking.Domain.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 Console.OutputEncoding = Encoding.UTF8;
 
@@ -94,6 +95,7 @@ bool receiptsEnabled = true;
 ServiceProvider BuildProvider(IReceiptSender receiptSender)
 {
     var services = new ServiceCollection();
+    services.AddLogging(logging => logging.AddSimpleConsole(options => options.SingleLine = true));
     services.AddSingleton(new BookingService(new InMemoryRepository<Ticket>(), _ => { }));
     services.AddSingleton(receiptSender);
     services.AddTransient<TicketApplicationService>();
@@ -489,7 +491,7 @@ static void RunErrorHandlingDemo(Movie movie)
 
 string DescribeHttpError(HttpRequestException ex)
 {
-   
+    
     int? code = (int?)ex.StatusCode;
 
     if (code is null)
