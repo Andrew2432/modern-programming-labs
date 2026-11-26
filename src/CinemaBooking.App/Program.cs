@@ -11,6 +11,7 @@ using CinemaBooking.Domain.Reports;
 using CinemaBooking.Domain.Repositories;
 using CinemaBooking.Domain.Services;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 Console.OutputEncoding = Encoding.UTF8;
 
@@ -32,7 +33,6 @@ var reportStorage = new ScreeningReportStorage();
 string apiBaseUrl = config["ExternalApi:BaseUrl"]
     ?? throw new InvalidOperationException("Параметр ExternalApi:BaseUrl не налаштовано в appsettings.json.");
 
-// Один HttpClient для всіх запитів.
 using var httpClient = new HttpClient { BaseAddress = new Uri(apiBaseUrl) };
 var userService = new ExternalUserService(httpClient);
 
@@ -90,6 +90,17 @@ var statisticsService = new StatisticsService();
 booking.TicketPurchased += receiptService.Handle;
 booking.TicketPurchased += statisticsService.Handle;
 bool receiptsEnabled = true;
+
+ServiceProvider BuildProvider(IReceiptSender receiptSender)
+{
+    var services = new ServiceCollection();
+    services.AddSingleton(new BookingService(new InMemoryRepository<Ticket>(), _ => { }));
+    services.AddSingleton(receiptSender);
+    services.AddTransient<TicketApplicationService>();
+    return services.BuildServiceProvider();
+}
+
+using var provider = BuildProvider(new ConsoleReceiptSender());
 
 Func<decimal, decimal> ChoosePricing()
 {
@@ -478,7 +489,7 @@ static void RunErrorHandlingDemo(Movie movie)
 
 string DescribeHttpError(HttpRequestException ex)
 {
-    
+   
     int? code = (int?)ex.StatusCode;
 
     if (code is null)
@@ -576,14 +587,13 @@ void TryBook(TicketApplicationService service, Screening screening, int row, int
 
 void RunSolidDemo()
 {
-    Console.WriteLine("\n--- ЛАБ. 10: TicketApplicationService ---");
+    Console.WriteLine("\n--- ЛАБ. 10: SOLID, DI ТА ЛОГУВАННЯ ---");
 
     var demoScreening = new Screening { Movie = m1, Hall = new Hall("Demo Hall", 100), Status = ScreeningStatus.SalesOpen };
-    var demoBooking = new BookingService(new InMemoryRepository<Ticket>(), _ => { });
 
-    var service = new TicketApplicationService(demoBooking, new ConsoleReceiptSender());
+    var service = provider.GetRequiredService<TicketApplicationService>();
 
-    Console.WriteLine("\n1) Успішне бронювання:");
+    Console.WriteLine("\n1) Успішне бронювання (ConsoleReceiptSender):");
     TryBook(service, demoScreening, 1, 5);
     Console.WriteLine($"Вільних місць: {demoScreening.AvailableSeats}");
 
@@ -592,7 +602,8 @@ void RunSolidDemo()
     Console.WriteLine($"Вільних місць: {demoScreening.AvailableSeats}");
 
     var memorySender = new InMemoryReceiptSender();
-    var memoryService = new TicketApplicationService(demoBooking, memorySender);
+    using var memoryProvider = BuildProvider(memorySender);
+    var memoryService = memoryProvider.GetRequiredService<TicketApplicationService>();
 
     Console.WriteLine("\n3) Та сама операція з InMemoryReceiptSender:");
     TryBook(memoryService, demoScreening, 1, 6);
