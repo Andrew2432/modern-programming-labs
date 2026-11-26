@@ -32,6 +32,7 @@ var reportStorage = new ScreeningReportStorage();
 string apiBaseUrl = config["ExternalApi:BaseUrl"]
     ?? throw new InvalidOperationException("Параметр ExternalApi:BaseUrl не налаштовано в appsettings.json.");
 
+// Один HttpClient для всіх запитів.
 using var httpClient = new HttpClient { BaseAddress = new Uri(apiBaseUrl) };
 var userService = new ExternalUserService(httpClient);
 
@@ -133,6 +134,7 @@ while (isRunning)
     Console.WriteLine("9. Прочитати звіт із JSON та підрахувати дохід (Lab 7)");
     Console.WriteLine("10. Контакти відвідувачів із зовнішнього API (Lab 8)");
     Console.WriteLine("11. Порівняти час: послідовно та Task.WhenAll (Lab 8)");
+    Console.WriteLine("12. Бронювання через TicketApplicationService (Lab 10: SOLID, DI, логування)");
     Console.WriteLine("0. Вийти");
     Console.Write("Оберіть дію: ");
 
@@ -294,6 +296,10 @@ while (isRunning)
 
         case "11":
             await CompareLoadingTimeAsync(userService);
+            break;
+
+        case "12":
+            RunSolidDemo();
             break;
 
         case "0":
@@ -472,7 +478,7 @@ static void RunErrorHandlingDemo(Movie movie)
 
 string DescribeHttpError(HttpRequestException ex)
 {
-  
+    
     int? code = (int?)ex.StatusCode;
 
     if (code is null)
@@ -490,7 +496,6 @@ async Task ShowVisitorContactsAsync(ExternalUserService userService)
 {
     Console.WriteLine("\n--- КОНТАКТИ ВІДВІДУВАЧІВ (для майбутніх повідомлень про сеанси) ---");
     Console.WriteLine("Loading external contacts...");
-
 
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
     var watch = Stopwatch.StartNew();
@@ -555,4 +560,43 @@ async Task CompareLoadingTimeAsync(ExternalUserService userService)
     {
         PrintError($"Сервер повернув некоректний JSON: {ex.Message}");
     }
+}
+
+void TryBook(TicketApplicationService service, Screening screening, int row, int number)
+{
+    try
+    {
+        service.BookSeat(screening, new Seat(row, number), 150m);
+    }
+    catch (InvalidOperationException ex)   
+    {
+        PrintError(ex.GetFriendlyMessage());
+    }
+}
+
+void RunSolidDemo()
+{
+    Console.WriteLine("\n--- ЛАБ. 10: TicketApplicationService ---");
+
+    var demoScreening = new Screening { Movie = m1, Hall = new Hall("Demo Hall", 100), Status = ScreeningStatus.SalesOpen };
+    var demoBooking = new BookingService(new InMemoryRepository<Ticket>(), _ => { });
+
+    var service = new TicketApplicationService(demoBooking, new ConsoleReceiptSender());
+
+    Console.WriteLine("\n1) Успішне бронювання:");
+    TryBook(service, demoScreening, 1, 5);
+    Console.WriteLine($"Вільних місць: {demoScreening.AvailableSeats}");
+
+    Console.WriteLine("\n2) Те саме місце ще раз:");
+    TryBook(service, demoScreening, 1, 5);
+    Console.WriteLine($"Вільних місць: {demoScreening.AvailableSeats}");
+
+    var memorySender = new InMemoryReceiptSender();
+    var memoryService = new TicketApplicationService(demoBooking, memorySender);
+
+    Console.WriteLine("\n3) Та сама операція з InMemoryReceiptSender:");
+    TryBook(memoryService, demoScreening, 1, 6);
+    Console.WriteLine($"Повідомлень у пам’яті: {memorySender.Messages.Count}");
+    foreach (string message in memorySender.Messages)
+        Console.WriteLine($"  {message}");
 }
