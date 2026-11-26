@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using CinemaBooking.App.Models;
 using CinemaBooking.App.Services;
 using CinemaBooking.Domain;
 using CinemaBooking.Domain.Exceptions;
@@ -11,6 +12,8 @@ using CinemaBooking.Domain.Reports;
 using CinemaBooking.Domain.Repositories;
 using CinemaBooking.Domain.Services;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 Console.OutputEncoding = Encoding.UTF8;
 
@@ -90,6 +93,18 @@ booking.TicketPurchased += receiptService.Handle;
 booking.TicketPurchased += statisticsService.Handle;
 bool receiptsEnabled = true;
 
+ServiceProvider BuildProvider(IReceiptSender receiptSender)
+{
+    var services = new ServiceCollection();
+    services.AddLogging(logging => logging.AddSimpleConsole(options => options.SingleLine = true));
+    services.AddSingleton(new BookingService(new InMemoryRepository<Ticket>(), _ => { }));
+    services.AddSingleton(receiptSender);
+    services.AddTransient<TicketApplicationService>();
+    return services.BuildServiceProvider();
+}
+
+using var provider = BuildProvider(new ConsoleReceiptSender());
+
 Func<decimal, decimal> ChoosePricing()
 {
     Console.WriteLine("Тип квитка: 1 - Звичайний, 2 - Студентський (-50%), 3 - Вихідний (+20%)");
@@ -133,6 +148,7 @@ while (isRunning)
     Console.WriteLine("9. Прочитати звіт із JSON та підрахувати дохід (Lab 7)");
     Console.WriteLine("10. Контакти відвідувачів із зовнішнього API (Lab 8)");
     Console.WriteLine("11. Порівняти час: послідовно та Task.WhenAll (Lab 8)");
+    Console.WriteLine("12. Бронювання через TicketApplicationService (Lab 10: SOLID, DI, логування)");
     Console.WriteLine("0. Вийти");
     Console.Write("Оберіть дію: ");
 
@@ -294,6 +310,10 @@ while (isRunning)
 
         case "11":
             await CompareLoadingTimeAsync(userService);
+            break;
+
+        case "12":
+            RunSolidDemo();
             break;
 
         case "0":
@@ -472,7 +492,7 @@ static void RunErrorHandlingDemo(Movie movie)
 
 string DescribeHttpError(HttpRequestException ex)
 {
-  
+    
     int? code = (int?)ex.StatusCode;
 
     if (code is null)
@@ -490,7 +510,6 @@ async Task ShowVisitorContactsAsync(ExternalUserService userService)
 {
     Console.WriteLine("\n--- КОНТАКТИ ВІДВІДУВАЧІВ (для майбутніх повідомлень про сеанси) ---");
     Console.WriteLine("Loading external contacts...");
-
 
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
     var watch = Stopwatch.StartNew();
@@ -555,4 +574,43 @@ async Task CompareLoadingTimeAsync(ExternalUserService userService)
     {
         PrintError($"Сервер повернув некоректний JSON: {ex.Message}");
     }
+}
+
+void TryBook(TicketApplicationService service, Screening screening, int row, int number)
+{
+    try
+    {
+        service.BookSeat(screening, new Seat(row, number), 150m);
+    }
+    catch (InvalidOperationException ex)   
+    {
+        PrintError(ex.GetFriendlyMessage());
+    }
+}
+
+void RunSolidDemo()
+{
+    Console.WriteLine("\n--- ЛАБ. 10: SOLID, DI ТА ЛОГУВАННЯ ---");
+
+    var demoScreening = new Screening { Movie = m1, Hall = new Hall("Demo Hall", 100), Status = ScreeningStatus.SalesOpen };
+
+    var service = provider.GetRequiredService<TicketApplicationService>();
+
+    Console.WriteLine("\n1) Успішне бронювання (ConsoleReceiptSender):");
+    TryBook(service, demoScreening, 1, 5);
+    Console.WriteLine($"Вільних місць: {demoScreening.AvailableSeats}");
+
+    Console.WriteLine("\n2) Те саме місце ще раз:");
+    TryBook(service, demoScreening, 1, 5);
+    Console.WriteLine($"Вільних місць: {demoScreening.AvailableSeats}");
+
+    var memorySender = new InMemoryReceiptSender();
+    using var memoryProvider = BuildProvider(memorySender);
+    var memoryService = memoryProvider.GetRequiredService<TicketApplicationService>();
+
+    Console.WriteLine("\n3) Та сама операція з InMemoryReceiptSender:");
+    TryBook(memoryService, demoScreening, 1, 6);
+    Console.WriteLine($"Повідомлень у пам’яті: {memorySender.Messages.Count}");
+    foreach (string message in memorySender.Messages)
+        Console.WriteLine($"  {message}");
 }

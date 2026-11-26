@@ -1,4 +1,4 @@
-﻿namespace CinemaBooking.App.Services;
+﻿namespace CinemaBooking.App.Models;
 
 public sealed record ExternalUser(
     int Id,

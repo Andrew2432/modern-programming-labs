@@ -1,4 +1,5 @@
 ﻿using System.Net.Http.Json;
+using CinemaBooking.App.Models;
 
 namespace CinemaBooking.App.Services;
 

@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\CinemaBooking.Domain\CinemaBooking.Domain.csproj" />
+    <ProjectReference Include="..\..\src\CinemaBooking.App\CinemaBooking.App.csproj" />
   </ItemGroup>
 
 </Project>
